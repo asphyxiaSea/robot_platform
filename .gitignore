@@ -2,3 +2,5 @@ models/
 .vscode/
 __pycache__/
 *.pyc
+.env
+.env.*
