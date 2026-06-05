@@ -1,21 +1,10 @@
-from typing import TypedDict
-
+from typing import Annotated, TypedDict
 import numpy as np
+from langchain_core.messages import BaseMessage
+from langgraph.graph.message import add_messages
 
 
 class VoiceControlState(TypedDict, total=False):
     audio: np.ndarray
     text: str
-    normalized_text: str
-    intent: str
-    route: str
-    action: str
-    linear_x: float
-    angular_z: float
-    duration_s: float
-    executed: bool
-    safety_stop_applied: bool
-    response: str
-    llm_raw: str
-    trace: list[str]
-    error: str
+    messages: Annotated[list[BaseMessage], add_messages]

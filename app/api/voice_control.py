@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from app.pipeline.voice_control_listener import voice_control_listener
+from app.pipeline.voice_control_recorder import voice_control_recorder
 
 router = APIRouter(prefix="/voice-control", tags=["voice-control"])
 
@@ -20,55 +20,41 @@ class VoiceControlStopResponse(BaseModel):
     message: str
 
 
-class VoiceControlStatusResponse(BaseModel):
-    running: bool
-    session_id: str
-
-
 @router.post("/start", response_model=VoiceControlStartResponse)
-def start_voice_control_listener() -> VoiceControlStartResponse:
+def start_voice_control_recorder() -> VoiceControlStartResponse:
     try:
-        started, session_id = voice_control_listener.start()
+        started, session_id = voice_control_recorder.start()
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"voice control listener start failed: {exc}") from exc
+        raise HTTPException(status_code=500, detail=f"voice control recorder start failed: {exc}") from exc
 
     if started:
-        message = "语音监听已启动，检测到语音后会自动触发工作流控制小车。"
+        message = "录音已开始，3秒后会自动停止并处理语音。"
     else:
-        message = "语音监听已在运行中。"
+        message = "录音已在进行中。"
 
     return VoiceControlStartResponse(
         started=started,
-        running=voice_control_listener.is_running(),
+        running=voice_control_recorder.is_running(),
         session_id=session_id,
         message=message,
     )
 
 
 @router.post("/stop", response_model=VoiceControlStopResponse)
-def stop_voice_control_listener() -> VoiceControlStopResponse:
+def stop_voice_control_recorder() -> VoiceControlStopResponse:
     try:
-        stopped = voice_control_listener.stop()
+        stopped = voice_control_recorder.stop()
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"voice control listener stop failed: {exc}") from exc
+        raise HTTPException(status_code=500, detail=f"voice control recorder stop failed: {exc}") from exc
 
     if stopped:
-        message = "语音监听已停止。"
+        message = "录音已手动停止，正在处理本次语音。"
     else:
-        message = "语音监听当前未运行。"
+        message = "当前没有正在进行的录音。"
 
     return VoiceControlStopResponse(
         stopped=stopped,
-        running=voice_control_listener.is_running(),
-        session_id=voice_control_listener.session_id(),
+        running=voice_control_recorder.is_running(),
+        session_id=voice_control_recorder.session_id(),
         message=message,
-    )
-
-
-@router.get("/status", response_model=VoiceControlStatusResponse)
-def get_voice_control_listener_status() -> VoiceControlStatusResponse:
-    status = voice_control_listener.status()
-    return VoiceControlStatusResponse(
-        running=bool(status["running"]),
-        session_id=str(status["session_id"]),
     )

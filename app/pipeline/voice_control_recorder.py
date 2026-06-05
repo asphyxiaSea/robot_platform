@@ -4,8 +4,6 @@ from uuid import uuid4
 
 import numpy as np
 import pyaudio
-import sounddevice as sd
-from piper.voice import PiperVoice
 
 from app.core.config import settings
 from app.workflows.voice_control.graph import voice_control_graph
@@ -33,12 +31,10 @@ MIC_RATE = 48000
 ASR_RATE = 16000
 FRAMES = 4096
 RESAMPLE_RATIO = MIC_RATE // ASR_RATE
-
-VOLUME_THRESHOLD = settings.voice_volume_threshold
-SILENCE_FRAMES = settings.voice_silence_frames
+RECORD_SECONDS = 3.0
 
 
-class VoiceControlListener:
+class VoiceControlRecorder:
     def __init__(self) -> None:
         self._thread: threading.Thread | None = None
         self._lock = threading.Lock()
@@ -74,23 +70,29 @@ class VoiceControlListener:
             self._running = False
             return was_running
 
-    def _speak(self, voice: PiperVoice, text: str) -> None:
-        print(f"\n[TTS] {text}")
-        audio = np.concatenate([chunk.audio_float_array for chunk in voice.synthesize(text)])
-        audio *= 0.3
-        sd.play(audio, voice.config.sample_rate)
-        sd.wait()
+    def _run_workflow(self, full_audio: np.ndarray) -> None:
+        print("\n[工作流处理中...]")
+        try:
+            result = voice_control_graph.invoke({"audio": full_audio})
+
+            text = result.get("text", "")
+            if text:
+                print(f"[识别] {text}")
+
+            messages = result.get("messages", [])
+            if messages:
+                last = messages[-1]
+                content = str(getattr(last, "content", "")).strip()
+                if content:
+                    print(f"[反馈] {content}")
+        except Exception as exc:
+            print(f"[工作流异常] {exc}")
 
     def _loop(self) -> None:
-        print("开始实时语音助手监听...")
+        print(f"开始录音，固定时长 {RECORD_SECONDS:.0f} 秒...")
         print(f"当前会话: {self._session_id}")
 
         try:
-            voice = PiperVoice.load(
-                "models/zh_CN-huayan-medium.onnx",
-                config_path="models/zh_CN-huayan-medium.onnx.json",
-            )
-
             audio_interface = pyaudio.PyAudio()
             stream = audio_interface.open(
                 rate=MIC_RATE,
@@ -103,57 +105,32 @@ class VoiceControlListener:
 
             try:
                 buffer: list[np.ndarray] = []
-                silence_count = 0
+                target_chunks = max(1, int(RECORD_SECONDS * MIC_RATE / FRAMES))
 
-                while self._running:
+                while self._running and len(buffer) < target_chunks:
                     data = stream.read(FRAMES, exception_on_overflow=False)
                     audio = np.frombuffer(data, dtype=np.int16)
                     audio_16k = audio[::RESAMPLE_RATIO]
-
-                    vol = float(np.abs(audio_16k).mean())
-                    print(
-                        f"[音量] {vol:.1f} buffer={len(buffer)} silence={silence_count}",
-                        end="\r",
-                    )
-
-                    if vol < VOLUME_THRESHOLD:
-                        silence_count += 1
-
-                        if buffer and silence_count >= SILENCE_FRAMES:
-                            full_audio = np.concatenate(buffer)
-                            buffer.clear()
-                            silence_count = 0
-
-                            print("\n[工作流处理中...]")
-
-                            result = voice_control_graph.invoke(
-                                {
-                                    "audio": full_audio,
-                                    "trace": [],
-                                }
-                            )
-                            text = result.get("text", "")
-                            if text:
-                                print(f"[识别] {text}")
-                            response = result.get("response", "")
-                            route = result.get("route", "fallback")
-                            print(f"[路由] {route}")
-
-                            if response:
-                                self._speak(voice, response)
-
-                        continue
-
-                    silence_count = 0
                     buffer.append(audio_16k)
+
+                    sec = len(buffer) * FRAMES / MIC_RATE
+                    print(f"[录音中] {sec:.1f}s", end="\r")
+
+                print("\n[录音结束]")
+
+                if buffer:
+                    full_audio = np.concatenate(buffer)
+                    self._run_workflow(full_audio)
+                else:
+                    print("\n[录音结束] 未采集到有效音频")
             finally:
                 stream.stop_stream()
                 stream.close()
                 audio_interface.terminate()
         except Exception as exc:
-            print(f"[监听异常] {exc}")
+            print(f"[录音异常] {exc}")
         finally:
             self._running = False
 
 
-voice_control_listener = VoiceControlListener()
+voice_control_recorder = VoiceControlRecorder()
