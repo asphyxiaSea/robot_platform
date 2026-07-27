@@ -1,11 +1,39 @@
-from langchain.chat_models import init_chat_model
+import subprocess
+import time
 
-llm = init_chat_model(
-    model="llama3.1:8b",
-    model_provider="ollama",
-    base_url="https://oa1.gxlky.com.cn/ollama",
-    temperature=0.1,
-)
+CONTAINER_INIT = "source /root/.bashrc && source /home/ws/ugv_ws/install/setup.bash"
 
-resp = llm.invoke("你好")
-print(f"[直接调用] {resp.content}")
+def docker_exec(cmd: str) -> subprocess.Popen:
+    return subprocess.Popen(
+        ["docker", "exec", "ugv_jetson_ros_humble",
+         "bash", "-i", "-c", f"{CONTAINER_INIT} && {cmd}"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT
+    )
+
+def main():
+    print("启动 SLAM 建图...")
+    slam_proc = docker_exec("ros2 launch ugv_nav slam_nav.launch.py use_rviz:=false")
+
+    print("等待 10 秒...")
+    time.sleep(10)
+
+    if slam_proc.poll() is not None:
+        out = slam_proc.stdout.read().decode()
+        print(f"SLAM 启动失败:\n{out}")
+        return
+
+    print("SLAM 启动成功，实时输出如下（Ctrl+C 停止）：")
+    try:
+        while True:
+            line = slam_proc.stdout.readline()
+            if line:
+                print(line.decode().rstrip())
+    except KeyboardInterrupt:
+        print("\n停止 SLAM...")
+        slam_proc.terminate()
+        slam_proc.wait()
+        print("已停止")
+
+if __name__ == "__main__":
+    main()

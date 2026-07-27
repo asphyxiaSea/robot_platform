@@ -5,12 +5,16 @@ class Settings(BaseSettings):
     app_name: str = "Robot Platform Workflow API"
     app_version: str = "0.1.0"
     env: str = "dev"
+
     funasr_url: str = "http://localhost:8010/funasr/transcribe/path"
     funasr_timeout_s: int = 10
+    remote_funasr_url: str = "http://localhost:11434/funasr/transcribe"
+    vosk_model_path: str = "models/vosk-model-cn-0.22"
+
     audio_input_device_index: int = 1
     voice_volume_threshold: float = 200.0
     voice_silence_frames: int = 8
-    ollama_base_url: str = "http://localhost:11434"
+    ollama_base_url: str = "http://localhost:11434/ollama"
     ollama_model: str = "llama3.1:8b"
     ollama_timeout_s: int = 20
     voice_llm_temperature: float = 0.1

@@ -1,10 +1,4 @@
-from langgraph.prebuilt import ToolNode
-
 from app.workflows.voice_control.nodes.tools.basic_control import basic_control_tools
 from app.workflows.voice_control.nodes.tools.mapping import mapping_tools
 
-robot_tools = [
-    *basic_control_tools,
-    *mapping_tools,
-]
-robot_tool_node = ToolNode(robot_tools)
+__all__ = ["basic_control_tools", "mapping_tools"]
